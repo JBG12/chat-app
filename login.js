@@ -32,6 +32,11 @@ app.get('/', function(request, response) {
 	response.sendFile(path.join(__dirname + '/login.html'));
 });
 
+app.get('/css.css', function(req, res) {
+  res.set('Content-Type', 'text/css');
+  res.sendFile(__dirname + '/css.css');
+});
+
 // http://localhost:3000/auth
 app.post('/auth', function(request, response) {
 	// Capture the input fields
@@ -151,8 +156,6 @@ app.post('/createchat', function(request, response) {
 
 
 io.on('connection', function(socket) {
-  console.log(`New client connected: socket ${socket.id}`);
-
   id = socket.id;
   socket.on('message', (id, currentRoom) => {
       io.to(socket.id).emit('ID', id);
@@ -166,7 +169,6 @@ io.on('connection', function(socket) {
       if (data && selectedUser) {
         connection.query("INSERT INTO `" + currentRoom + "` (message, date, user) VALUES (?, ?, ?)", [data, timeNow, selectedUser], function(error, result, fields) {
           if (error) throw error;
-          console.log('succes!');
         });
       }
   });
@@ -179,7 +181,7 @@ app.post('/server', function(request, response) {
   	// If the user is loggedin
 if (request.session.loggedin) {
     // name
-  
+  let userr = request.session.thiss;
   currentRoom = request.body.userIds;
 
     // Chat history
@@ -188,6 +190,7 @@ if (request.session.loggedin) {
     <head>
       <title>Chat App</title>
       <script src="/socket.io/socket.io.js"></script>
+      <link rel="stylesheet" href="/css.css">
     </head>
     <body>
       <h1>Chat App</h1>`);
@@ -195,12 +198,16 @@ if (request.session.loggedin) {
   response.write(`</div>`);
   response.write(`<script>`);
   response.write(`var div = document.getElementById('history');`);
-  connection.query("SELECT c.message, c.date, a.username FROM `" + currentRoom + "` c INNER JOIN accounts a ON c.user = a.id", function(error, result, fields) {
+  connection.query("SELECT c.message, c.date, c.user, a.username FROM `" + currentRoom + "` c INNER JOIN accounts a ON c.user = a.id", function(error, result, fields) {
     if (result) {
       var html = '';
       for (let i = 0; i < result.length; i++) {
         const row = result[i];
-        html += `<p class="${row.id}">${row.username} | ${row.message}</p>`;
+        classThis = "other";
+        if (row.user == userr) {
+          classThis = "user";
+        }
+        html += `<div class="msgBox"><p class="${classThis}">${row.username}:<br> ${row.message}</p></div>`;
       }
       response.write(`<script>`);
       response.write(`div.innerHTML += '${html}';`);
@@ -219,8 +226,6 @@ if (request.session.loggedin) {
 
 
   io.on('connection', function(socket) {
-    console.log(`New client connected: socket ${socket.id}`);
-    
     let chatt = request.body.userIds;
     io.to(socket.id).emit('chatt', chatt);
     socket.join(currentRoom);
@@ -233,7 +238,6 @@ if (request.session.loggedin) {
     let chatt = request.body.userIds;
     let selectedUser1 = request.session.thiss;
     response.write(`
-        <div id="chat-box"></div>
         <form method="post" id="chat-form">
           <input type="text" id="chat-input" />
           <button type="submit">Send</button>
@@ -250,7 +254,6 @@ if (request.session.loggedin) {
     });
     socket.on('connect', function() {
       socket.emit('message', document.getElementById('chat-input').value, currentRoom);
-      console.log(socket.rooms);
     });
     
     // Emits a chat message event with the message when the user submits the form
@@ -264,38 +267,42 @@ if (request.session.loggedin) {
       // Appends the message to the chat log
       document.getElementById('chat-log').append(msg);
     });
-        
-        const chatBox = document.getElementById('chat-box');
-        const chatInput = document.getElementById('chat-input');
+    const chatBox = document.getElementById("history");
+    
+    const chatInput = document.getElementById('chat-input');
 
-        socket.on('message', (data, id) => {
-            console.log(socket.id);
-            if (id === socket.id) {
-                chatBox.innerHTML += '<p>YOU - ' + socket.id + ': <br>' + data + '</p>';
-            } else {
-                // message was sent by another client
-                chatBox.innerHTML += '<p>OTHER - ' + id + ': <br>' + data + '</p>';
-            }
-        });
+    socket.on('message', (data, id) => {
+        if (id === socket.id) {
+            chatBox.innerHTML += '<div class="msgBox"><p class="user">' + socket.id + ':<br> ' + data + '</p></div>';
+        } else {
+            // message was sent by another client
+            chatBox.innerHTML += '<div class="msgBox"><p class="other">' + id + ':<br> ' + data + '</p></div>';
+        }
+    });
 
-        // socket.on('message', (data, thisClient) => {
-        // chatBox.innerHTML += '<p>' + ': <br>' + data + '</p>';
-        // });
-        selectedUser = ${selectedUser1};
-        console.log(selectedUser);
-        document.addEventListener('DOMContentLoaded', () => {
-            // Prevent form refresh and send msg.
-            document.getElementById('chat-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            socket.emit('message', chatInput.value, currentRoom, selectedUser);
-            // reset input field.
-            chatInput.value = '';
-            });
+    // socket.on('message', (data, thisClient) => {
+    // chatBox.innerHTML += '<p>' + ': <br>' + data + '</p>';
+    // });
+    selectedUser = ${selectedUser1};
+    document.addEventListener('DOMContentLoaded', () => {
+        // Prevent form refresh and send msg.
+        document.getElementById('chat-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        socket.emit('message', chatInput.value, currentRoom, selectedUser);
+        // reset input field.
+        chatInput.value = '';
         });
-        </script>`);
+    });
+    // Set scrollbar of chat always to bottom, updates on receiving message 
+    let element = document.getElementById("history");
+    let observer = new MutationObserver(function() {
+      console.log("test");
+      element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element, { childList: true });
+    </script>`);
 	} else {
 		// Not logged in
 		response.send('Please login to view this page!');
 	}
-	// response.end();
 });
