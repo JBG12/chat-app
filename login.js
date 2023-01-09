@@ -296,7 +296,6 @@ if (request.session.loggedin) {
     // Set scrollbar of chat always to bottom, updates on receiving message 
     let element = document.getElementById("history");
     let observer = new MutationObserver(function() {
-      console.log("test");
       element.scrollTop = element.scrollHeight;
     });
     observer.observe(element, { childList: true });
