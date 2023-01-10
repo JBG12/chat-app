@@ -74,6 +74,7 @@ app.get('/menu', async function(request, response) {
         <html>
           <head>
             <title>Chat App</title>
+            <link rel="stylesheet" href="/css.css">
             <script src="/socket.io/socket.io.js"></script>
           </head>
           <body>
@@ -84,14 +85,15 @@ app.get('/menu', async function(request, response) {
         response.write('<br>');
         response.write(`</form>`);
         response.write(`<h2>Create Chat</h2>`);
+        response.write(`<div class="selectBox">`);
         response.write(`<select name="onUsers" id="selecting" form="selectForm">`);
         connection.query("SELECT * FROM accounts WHERE logged_in = 'true'", function(error, result, fields) {
             Object.keys(result).forEach(function(key) {
                 var row = result[key];
-                // console.log(row.username);
                 response.write(`<option value="${row.id}">${row.username}</option>`);
             });
             response.write(`</select>`);
+            response.write(`</div>`);
             response.write(`<form action="/createchat" id="selectForm" method="post">`);
             response.write(`<input type="submit" value="Create Chat">`);
             response.write(`</form>`);
@@ -105,12 +107,13 @@ app.get('/menu', async function(request, response) {
     // response.end();
 });
 // users chats overview page
-app.post('/chats', function(request, response) {
+app.post('/chats', async function(request, response) {
     if (request.session.loggedin) {
         response.write(`<!DOCTYPE html>
         <html>
           <head>
             <title>Chat App</title>
+            <link rel="stylesheet" href="/css.css">
             <script src="/socket.io/socket.io.js"></script>
           </head>
           <body>
@@ -118,25 +121,47 @@ app.post('/chats', function(request, response) {
         response.write(`<h2>Chats</h2>`);
         // response.write(`<div class="chats">`);
         userid = request.session.thiss;
-        connection.query("SHOW TABLES like 'chat-%'", function(error, result, fields) {
-            Object.keys(result).forEach(function(key) {
+        // const userName = new Promise((resolve) => {
+        connection.query("SHOW TABLES like 'chat-%'", async function(error, result, fields) {
+            Object.keys(result).forEach(async function(key) {
+              if (error) throw error;
+              var row = result[key];
+              chatTable = row['Tables_in_nodelogin (chat-%)'];
+              // Check for all the users chats
+              let resultzero = chatTable.includes(userid + '-');
+              let resultone = chatTable.includes('-' + userid);
+
+              roomSplit = chatTable.match(/\d/g)
+              userOne = roomSplit[0];
+              userTwo = roomSplit[1];
+              let display;
+              if (userOne == userid) {
+                display = userTwo;
+              } else {
+                display = userOne;
+              }
+              connection.query('SELECT username FROM accounts WHERE id = ?', [display], async function(error, result, fields) {
+                Object.keys(result).forEach(async function(key) {
                 if (error) throw error;
-                var row = result[key];
-                chatTable = row['Tables_in_nodelogin (chat-%)'];
-                // Check for all the users chats
-                let resultzero = chatTable.includes(userid + '-');
-                let resultone = chatTable.includes('-' + userid);
-                // console.log(resultone);
-                if ((resultzero === true) || (resultone === true)) {
-                    // response.write(`<p>${chatTable}</p>`);
-                    response.write(`<form action="/server" id="selectChat" method="post">`);
-                    response.write(`<button type="submit" name="userIds" form="selectChat" value="${chatTable}">${chatTable}</button>`);
-                    response.write(`</form>`);
+                
+                if (result[0]) {
+                  display = result[key]['username'];
                 }
+                console.log(display);
+                response.write(`<p>${display}</p>`);
+              });
+              });
+              if ((resultzero === true) || (resultone === true)) {
+                  response.write(`<form action="/server" id="selectChat" method="post">`);
+                  response.write(`<button type="submit" class="aChat" name="userIds" form="selectChat" value="${chatTable}">${display}</button>`);
+                  response.write(`</form>`);
+              }
+              // response.end();
             });
             // response.write(`</div>`);
             response.end();
         });
+      // });
     } else {
         response.send('Please login to view this page!');
     }
@@ -151,7 +176,7 @@ app.post('/createchat', function(request, response) {
         if (error) throw error;
         response.write(`<h1>Chat Created</h1>`);
     });
-    response.end();
+    response.redirect('/menu');
 });
 
 
@@ -193,7 +218,22 @@ if (request.session.loggedin) {
       <link rel="stylesheet" href="/css.css">
     </head>
     <body>
-      <h1>Chat App</h1>`);
+      <h1 id="chatWith">Chat App</h1>`);
+  roomSplit = currentRoom.match(/\d/g)
+  userOne = roomSplit[0];
+  userTwo = roomSplit[1];
+  let display;
+  if (userOne == userr) {
+    display = userTwo;
+  } else {
+    display = userOne;
+  }
+  connection.query('SELECT username FROM accounts WHERE id = ?', [display], function(error, result, fields) {
+    if (error) throw error;
+    display = result[0]['username'];
+    response.write(`<h2 id="chatr"> Chat with ${display} </h2>`);
+  });
+
   response.write(`<div id="history">`);
   response.write(`</div>`);
   response.write(`<script>`);
@@ -207,7 +247,7 @@ if (request.session.loggedin) {
         if (row.user == userr) {
           classThis = "user";
         }
-        html += `<div class="msgBox"><p class="${classThis}">${row.username}:<br> ${row.message}</p></div>`;
+        html += `<div class="msgBox"><p class="${classThis}">${row.message}</p></div>`;
       }
       response.write(`<script>`);
       response.write(`div.innerHTML += '${html}';`);
@@ -216,31 +256,18 @@ if (request.session.loggedin) {
     response.end();
   });
   response.write(`</script>`);
-  // response.write(`</div>`);
-  // response.write(`
-  // <script>
-  // var source = document.getElementById("chat-box");
-  // var abc = document.getElementById("history");
-  // abc.append(source);
-  // </script>`);
-
 
   io.on('connection', function(socket) {
     let chatt = request.body.userIds;
     io.to(socket.id).emit('chatt', chatt);
     socket.join(currentRoom);
-    // Logging rooms...
-    // console.log('TEST1:');
-    // for (let [room, sockets] of io.sockets.adapter.rooms) {
-    //   console.log(`Room: ${room}, Sockets: ${[...sockets]}`);
-    // }
   });
     let chatt = request.body.userIds;
     let selectedUser1 = request.session.thiss;
     response.write(`
         <form method="post" id="chat-form">
           <input type="text" id="chat-input" />
-          <button type="submit">Send</button>
+          <button class="sendMsg" type="submit">Send</button>
         </form>
       </body>
     </html>
@@ -273,10 +300,10 @@ if (request.session.loggedin) {
 
     socket.on('message', (data, id) => {
         if (id === socket.id) {
-            chatBox.innerHTML += '<div class="msgBox"><p class="user">' + socket.id + ':<br> ' + data + '</p></div>';
+            chatBox.innerHTML += '<div class="msgBox"><p class="user">' + data + '</p></div>';
         } else {
             // message was sent by another client
-            chatBox.innerHTML += '<div class="msgBox"><p class="other">' + id + ':<br> ' + data + '</p></div>';
+            chatBox.innerHTML += '<div class="msgBox"><p class="other">' + data + '</p></div>';
         }
     });
 
@@ -285,13 +312,15 @@ if (request.session.loggedin) {
     // });
     selectedUser = ${selectedUser1};
     document.addEventListener('DOMContentLoaded', () => {
-        // Prevent form refresh and send msg.
-        document.getElementById('chat-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        socket.emit('message', chatInput.value, currentRoom, selectedUser);
-        // reset input field.
-        chatInput.value = '';
-        });
+    // Prevent form refresh and send msg.
+    document.getElementById('chat-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (chatInput.value) {
+    socket.emit('message', chatInput.value, currentRoom, selectedUser);
+    }
+    // reset input field.
+    chatInput.value = '';
+    });
     });
     // Set scrollbar of chat always to bottom, updates on receiving message 
     let element = document.getElementById("history");
@@ -299,6 +328,10 @@ if (request.session.loggedin) {
       element.scrollTop = element.scrollHeight;
     });
     observer.observe(element, { childList: true });
+    window.addEventListener('load', (event) =>{
+      let element = document.getElementById("displayName");
+      document.getElementById("selectChat").innerHTML += element;
+    });
     </script>`);
 	} else {
 		// Not logged in
